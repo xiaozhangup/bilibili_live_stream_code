@@ -205,6 +205,14 @@ export const useBridge = () => {
       return res.code === 0;
     },
 
+    // 开播状态接口配置
+    async getStatusApiConfig() {
+      return await callPy('get_status_api_config');
+    },
+    async setStatusApiPort(port) {
+      return await callPy('set_status_api_port', port);
+    },
+
     // 定时开播配置
     async getScheduleConfig() {
       return await callPy('get_schedule_config');

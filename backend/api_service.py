@@ -10,6 +10,7 @@ from backend.services.live_service import LiveService
 from backend.services.auth_service import AuthService
 from backend.services.danmu_service import DanmuService
 from backend.services.schedule_service import ScheduleService
+from backend.services.status_api_service import StatusApiService
 
 logger = logging.getLogger("ApiService")
 
@@ -63,6 +64,12 @@ class ApiService:
             interval_sec=30,
         )
         self.schedule_service.start()
+
+        # 对外状态接口
+        self.status_api_service = StatusApiService(self.session_state, host="127.0.0.1")
+        port = int(self.config_manager.data.get("status_api_port", 0) or 0)
+        if port > 0:
+            self.status_api_service.start(port)
         
         # Asyncio loop for danmu
         self.loop = asyncio.new_event_loop()
@@ -103,6 +110,10 @@ class ApiService:
         asyncio.run_coroutine_threadsafe(self.danmu_service.stop(), self.loop)
         try:
             self.schedule_service.stop()
+        except Exception:
+            pass
+        try:
+            self.status_api_service.stop()
         except Exception:
             pass
         return self.window_service.window_close(lambda: self.config_manager.save())
@@ -193,6 +204,34 @@ class ApiService:
             self.config_manager.save()
             return {"code": 0}
         return {"code": -1, "msg": "Unknown config key"}
+
+    # --- Status API Methods ---
+    def get_status_api_config(self):
+        port = int(self.config_manager.data.get("status_api_port", 0) or 0)
+        return {
+            "code": 0,
+            "data": {
+                "enabled": port > 0,
+                "port": port,
+                "url": f"http://127.0.0.1:{port}/status" if port > 0 else "",
+            },
+        }
+
+    def set_status_api_port(self, port):
+        try:
+            port = int(port)
+        except Exception:
+            return {"code": -1, "msg": "端口必须是数字"}
+        if port < 0 or port > 65535:
+            return {"code": -1, "msg": "端口范围必须是 0-65535"}
+
+        ok, msg = self.status_api_service.start(port)
+        if not ok:
+            return {"code": -1, "msg": msg}
+
+        self.config_manager.data["status_api_port"] = port
+        self.config_manager.save()
+        return {"code": 0, "data": {"port": port}}
 
     # --- Schedule Config Methods ---
     def get_schedule_config(self):

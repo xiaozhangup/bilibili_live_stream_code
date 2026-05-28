@@ -7,15 +7,29 @@ const props = defineProps(['formData', 'liveState']);
 const emit = defineEmits(['stream-start', 'stream-stop', 'update-form']);
 const showModal = inject('showModal');
 
-const { getPartitions, updateSettings, toggleLive } = useBridge();
+const { getPartitions, updateSettings, toggleLive, getStatusApiConfig, setStatusApiPort } = useBridge();
 const partitions = ref({});
 const loading = ref(false);
 
 const showVerify = ref(false);
 const verifyQr = ref('');
 
+const statusApiEnabled = ref(false);
+const statusApiPort = ref(18080);
+const statusApiUrl = ref('');
+
+const refreshStatusApi = async () => {
+  const res = await getStatusApiConfig();
+  if (res.code === 0 && res.data) {
+    statusApiEnabled.value = !!res.data.enabled;
+    statusApiPort.value = res.data.port || 18080;
+    statusApiUrl.value = res.data.url || '';
+  }
+};
+
 onMounted(async () => {
   partitions.value = await getPartitions();
+  await refreshStatusApi();
 });
 
 const updateLocal = (key, val) => {
@@ -91,6 +105,22 @@ const doToggle = async () => {
 const subPartitions = computed(() => {
   return partitions.value[props.formData.area] || [];
 });
+
+const applyStatusApi = async () => {
+  const port = statusApiEnabled.value ? Number(statusApiPort.value) : 0;
+  if (statusApiEnabled.value && (!Number.isInteger(port) || port <= 0 || port > 65535)) {
+    return showModal('错误', '端口必须是 1-65535 的整数', 'error');
+  }
+  const res = await setStatusApiPort(port);
+  if (res.code === 0) {
+    await refreshStatusApi();
+    if (port > 0) showModal('成功', `状态接口已启动: ${statusApiUrl.value}`, 'success');
+    else showModal('成功', '状态接口已关闭', 'success');
+  } else {
+    showModal('失败', res.msg || '设置失败', 'error');
+    await refreshStatusApi();
+  }
+};
 </script>
 
 <template>
@@ -150,6 +180,33 @@ const subPartitions = computed(() => {
       <p v-if="!liveState.isLive" class="hint">
         <span class="info-icon">i</span> 点击开始将自动同步标题
       </p>
+    </div>
+
+    <div class="card config-card" style="margin-top: 20px;">
+      <div class="input-group">
+        <label class="label">开播状态接口</label>
+        <div class="row">
+          <label style="user-select:none;">
+            <input type="checkbox" v-model="statusApiEnabled"> 启用
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="65535"
+            v-model="statusApiPort"
+            class="gemini-input"
+            style="max-width: 160px;"
+            :disabled="!statusApiEnabled"
+            placeholder="端口"
+          >
+          <button class="btn btn-secondary action-btn" @click="applyStatusApi">
+            应用
+          </button>
+        </div>
+        <p class="hint" style="margin-top: 8px;" v-if="statusApiEnabled && statusApiUrl">
+          <span class="info-icon">i</span> <code>{{ statusApiUrl }}</code>
+        </p>
+      </div>
     </div>
   </div>
 
