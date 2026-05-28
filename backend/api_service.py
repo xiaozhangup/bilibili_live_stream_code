@@ -9,6 +9,7 @@ from backend.services.user_service import UserService
 from backend.services.live_service import LiveService
 from backend.services.auth_service import AuthService
 from backend.services.danmu_service import DanmuService
+from backend.services.schedule_service import ScheduleService
 
 logger = logging.getLogger("ApiService")
 
@@ -39,6 +40,9 @@ class ApiService:
         self.live_service = LiveService(self.api_client, self.config_manager, self.session_state)
         self.auth_service = AuthService(self.api_client, self.user_service, self.live_service, self.session_state)
         self.danmu_service = DanmuService(self.api_client, self.session_state)
+
+        # 防止并发 start/stop（前端/托盘/定时）
+        self._live_lock = threading.Lock()
         
         # 设置弹幕回调
         self.danmu_service.set_callback(self._on_danmu_message)
@@ -49,6 +53,16 @@ class ApiService:
 
         # Initial setup
         self.user_service.init_current_user()
+
+        # 定时开播服务
+        self.schedule_service = ScheduleService(
+            self.config_manager,
+            self.session_state,
+            self.live_service,
+            self._live_lock,
+            interval_sec=30,
+        )
+        self.schedule_service.start()
         
         # Asyncio loop for danmu
         self.loop = asyncio.new_event_loop()
@@ -87,6 +101,10 @@ class ApiService:
             self.live_service.stop_live()
 
         asyncio.run_coroutine_threadsafe(self.danmu_service.stop(), self.loop)
+        try:
+            self.schedule_service.stop()
+        except Exception:
+            pass
         return self.window_service.window_close(lambda: self.config_manager.save())
     def get_window_position(self): return self.window_service.get_window_position()
     def window_drag(self, target_x, target_y): return self.window_service.window_drag(target_x, target_y)
@@ -112,7 +130,8 @@ class ApiService:
     def update_title(self, title): return self.live_service.update_title(title)
     def update_area(self, p_name, s_name): return self.live_service.update_area(p_name, s_name)
     def start_live(self, p_name=None, s_name=None): 
-        res = self.live_service.start_live(p_name, s_name)
+        with self._live_lock:
+            res = self.live_service.start_live(p_name, s_name)
         # if res['code'] == 0:
         #      # 开启直播成功后，连接弹幕
         #      room_id = self.session_state.room_id
@@ -121,7 +140,8 @@ class ApiService:
         return res
         
     def stop_live(self): 
-        res = self.live_service.stop_live()
+        with self._live_lock:
+            res = self.live_service.stop_live()
         return res
 
     # --- Danmu Methods ---
@@ -215,6 +235,10 @@ class ApiService:
 
         users[uid]["auto_live_schedule"] = {"enabled": bool(enabled), "periods": normalized}
         self.config_manager.save()
+        try:
+            self.schedule_service.wakeup()
+        except Exception:
+            pass
         return {"code": 0}
 
     def get_version(self):
