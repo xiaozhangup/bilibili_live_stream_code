@@ -182,6 +182,12 @@ export const useBridge = () => {
     async stopDanmuMonitor() {
       return await callPy('stop_danmu_monitor');
     },
+    async getDanmuConfig() {
+      return await callPy('get_danmu_config');
+    },
+    async setDanmuConfig(tryFetch) {
+      return await callPy('set_danmu_config', tryFetch);
+    },
 
     // 发送弹幕
     async sendDanmu(msg) {

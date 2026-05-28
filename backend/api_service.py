@@ -147,6 +147,8 @@ class ApiService:
     # --- Danmu Methods ---
     def start_danmu_monitor(self):
         """开启弹幕监听，如果已在运行则跳过"""
+        if not bool(self.config_manager.data.get("danmu_try_fetch", False)):
+            return {"code": -1, "msg": "弹幕获取已关闭（请在弹幕页开启开关）"}
         if self.danmu_service.running:
             return {"code": 0, "msg": "弹幕已在运行"}
         room_id = self.session_state.room_id
@@ -162,6 +164,16 @@ class ApiService:
     def send_danmu(self, msg):
         """发送弹幕"""
         return self.danmu_service.send_danmu(msg)
+
+    def get_danmu_config(self):
+        return {"code": 0, "data": {"try_fetch": bool(self.config_manager.data.get("danmu_try_fetch", False))}}
+
+    def set_danmu_config(self, try_fetch):
+        self.config_manager.data["danmu_try_fetch"] = bool(try_fetch)
+        self.config_manager.save()
+        if not bool(try_fetch):
+            asyncio.run_coroutine_threadsafe(self.danmu_service.stop(), self.loop)
+        return {"code": 0}
 
     # --- App Config Methods ---
     def get_app_config(self):
