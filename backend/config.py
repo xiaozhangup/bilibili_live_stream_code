@@ -63,7 +63,15 @@ class Config:
         self.data = self._load_config()
 
     def _load_config(self):
-        default_config = {"users": {}, "current_uid": None, "min_to_tray": True}
+        default_config = {
+            "users": {},
+            "current_uid": None,
+            "min_to_tray": True,
+            # 弹幕页是否尝试连接弹幕（默认关闭）
+            "danmu_try_fetch": False,
+            # 对外状态接口端口，0 表示关闭
+            "status_api_port": 0,
+        }
         if os.path.exists(CONFIG_FILE):
             try:
                 with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -87,6 +95,15 @@ class Config:
                                 "min_to_tray": True # Default to True
                             }
                         except: pass
+                    # 兼容旧配置：补齐缺失字段
+                    if "danmu_try_fetch" not in data:
+                        data["danmu_try_fetch"] = default_config["danmu_try_fetch"]
+                    if "status_api_port" not in data:
+                        data["status_api_port"] = default_config["status_api_port"]
+                    if "min_to_tray" not in data:
+                        data["min_to_tray"] = default_config["min_to_tray"]
+                    if "users" not in data:
+                        data["users"] = {}
                     return data
             except Exception as e:
                 logger.error(f"Config load failed: {e}")

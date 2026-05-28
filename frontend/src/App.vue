@@ -8,6 +8,7 @@ import StreamPanel from '@/components/StreamPanel.vue';
 import ConsolePanel from '@/components/ConsolePanel.vue';
 import DanmuPanel from '@/components/DanmuPanel.vue';
 import RtmpPanel from '@/components/RtmpPanel.vue';
+import SchedulePanel from '@/components/SchedulePanel.vue';
 import MessageModal from '@/components/MessageModal.vue';
 import UserAccountModal from '@/components/UserAccountModal.vue';
 import WindowControls from '@/components/WindowControls.vue';
@@ -193,7 +194,7 @@ const handleSidebarAccountClick = () => {
       <main class="content">
         <KeepAlive>
           <component
-            :is="activeTab === 'account' ? AccountPanel : activeTab === 'stream' ? StreamPanel : activeTab === 'rtmp' ? RtmpPanel : activeTab === 'console' ? ConsolePanel : DanmuPanel"
+            :is="activeTab === 'account' ? AccountPanel : activeTab === 'stream' ? StreamPanel : activeTab === 'schedule' ? SchedulePanel : activeTab === 'rtmp' ? RtmpPanel : activeTab === 'console' ? ConsolePanel : DanmuPanel"
             :current-user="userInfo"
             :form-data="globalForm"
             :live-state="liveState"

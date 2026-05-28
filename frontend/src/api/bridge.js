@@ -199,6 +199,14 @@ export const useBridge = () => {
       return res.code === 0;
     },
 
+    // 定时开播配置
+    async getScheduleConfig() {
+      return await callPy('get_schedule_config');
+    },
+    async setScheduleConfig(enabled, periods) {
+      return await callPy('set_schedule_config', enabled, periods);
+    },
+
     // 版本号
     async getVersion() {
       const res = await callPy('get_version');

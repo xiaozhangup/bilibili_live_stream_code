@@ -162,6 +162,61 @@ class ApiService:
             return {"code": 0}
         return {"code": -1, "msg": "Unknown config key"}
 
+    # --- Schedule Config Methods ---
+    def get_schedule_config(self):
+        """获取当前账号的定时开播配置"""
+        uid = self.config_manager.data.get("current_uid")
+        users = self.config_manager.data.get("users", {})
+        if not uid or uid not in users:
+            return {"code": -1, "msg": "未登录"}
+        schedule = users[uid].get("auto_live_schedule") or {"enabled": False, "periods": []}
+        # 兜底补齐字段，避免旧数据缺失
+        schedule.setdefault("enabled", False)
+        schedule.setdefault("periods", [])
+        return {"code": 0, "data": schedule}
+
+    def set_schedule_config(self, enabled, periods):
+        """保存当前账号的定时开播配置"""
+        uid = self.config_manager.data.get("current_uid")
+        users = self.config_manager.data.get("users", {})
+        if not uid or uid not in users:
+            return {"code": -1, "msg": "未登录"}
+
+        def parse_hhmm(value):
+            if not isinstance(value, str):
+                raise ValueError("时间格式错误")
+            value = value.strip()
+            parts = value.split(":")
+            if len(parts) != 2:
+                raise ValueError("时间格式错误")
+            hour = int(parts[0])
+            minute = int(parts[1])
+            if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+                raise ValueError("时间范围错误")
+            return f"{hour:02d}:{minute:02d}"
+
+        if periods is None:
+            periods = []
+        if not isinstance(periods, list):
+            return {"code": -1, "msg": "periods 必须是数组"}
+        if len(periods) > 20:
+            return {"code": -1, "msg": "最多支持 20 个时段"}
+
+        normalized = []
+        try:
+            for p in periods:
+                if not isinstance(p, dict):
+                    raise ValueError("时段格式错误")
+                start = parse_hhmm(p.get("start", ""))
+                end = parse_hhmm(p.get("end", ""))
+                normalized.append({"start": start, "end": end})
+        except Exception as e:
+            return {"code": -1, "msg": str(e)}
+
+        users[uid]["auto_live_schedule"] = {"enabled": bool(enabled), "periods": normalized}
+        self.config_manager.save()
+        return {"code": 0}
+
     def get_version(self):
         """获取应用版本号"""
         import os, sys
