@@ -1,18 +1,46 @@
 import os
 import sys
 
+def _has_qt_input_context_plugin(plugin_name):
+    base_paths = []
+
+    if getattr(sys, 'frozen', False):
+        base_paths.append(sys._MEIPASS)
+
+    try:
+        import PyQt5
+        base_paths.append(os.path.join(os.path.dirname(PyQt5.__file__), 'Qt5'))
+    except Exception:
+        pass
+
+    for base_path in base_paths:
+        plugin_dir = os.path.join(base_path, 'plugins', 'platforminputcontexts')
+        if not os.path.isdir(plugin_dir):
+            continue
+
+        for file_name in os.listdir(plugin_dir):
+            if plugin_name in file_name:
+                return True
+
+    return False
+
 # [修复] 根据平台设置不同的环境变量
 if sys.platform == 'linux':
-    os.environ["GDK_BACKEND"] = "x11"
-    os.environ["QT_QPA_PLATFORM"] = "xcb"
-    os.environ["QT_OPENGL"] = "software"
-    os.environ["QT_QUICK_BACKEND"] = "software"
+    is_wayland_session = (
+        os.environ.get("XDG_SESSION_TYPE") == "wayland"
+        and bool(os.environ.get("WAYLAND_DISPLAY"))
+    )
+    if not os.environ.get("GDK_BACKEND"):
+        os.environ["GDK_BACKEND"] = "wayland,x11" if is_wayland_session else "x11"
+    if not os.environ.get("QT_QPA_PLATFORM"):
+        os.environ["QT_QPA_PLATFORM"] = "wayland" if is_wayland_session else "xcb"
     os.environ["QT_STYLE_OVERRIDE"] = "Fusion"
-    os.environ["XDG_SESSION_TYPE"] = "x11"
     if "QT_QPA_PLATFORMTHEME" in os.environ:
         os.environ["QT_QPA_PLATFORMTHEME"] = ""
+    if os.environ.get("QT_IM_MODULE") == "fcitx" and not _has_qt_input_context_plugin("fcitx"):
+        os.environ["QT_IM_MODULE"] = "ibus"
     os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
-    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --disable-software-rasterizer --disable-dev-shm-usage"
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-dev-shm-usage"
 elif sys.platform == 'win32':
     os.environ["QT_OPENGL"] = "software"
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --disable-software-rasterizer"
@@ -119,8 +147,8 @@ def _get_primary_monitor_scale_win():
 
 if __name__ == '__main__':
     api = ApiService()
-    window_width = 1000
-    window_height = 720
+    window_width = 760
+    window_height = 504
     scale = 1.0
     if sys.platform == 'win32':
         _enable_windows_dpi_awareness()

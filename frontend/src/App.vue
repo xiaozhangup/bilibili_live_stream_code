@@ -277,4 +277,62 @@ const handleSidebarAccountClick = () => {
 .tray-qr-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #999; }
 .tray-verify-tip { padding: 0 20px; margin: 20px 0; font-size: 14px; color: #444; text-align: center; }
 .tray-verify-done { width: calc(100% - 40px); margin: 0 20px 20px 20px; height: 44px; }
+
+/* 紧凑布局：适配 700x504 默认窗口，降低控件和留白占用 */
+.content { padding: 22px !important; }
+.sidebar { width: 176px !important; padding: 14px !important; }
+.logo { font-size: 15px !important; margin-bottom: 22px !important; }
+.item { padding: 8px 10px !important; font-size: 13px !important; }
+.user-card { padding: 8px !important; gap: 8px !important; border-radius: 10px !important; }
+.avatar,
+.avatar-placeholder { width: 32px !important; height: 32px !important; }
+.name { font-size: 13px !important; }
+.lv,
+.version-tag { font-size: 11px !important; }
+
+.card,
+.config-card,
+.highlight,
+.exp-section { padding: 16px !important; border-radius: 10px !important; }
+.header-section { margin-bottom: 16px !important; }
+.title { font-size: 19px !important; }
+.subtitle,
+.label,
+.setting-label { font-size: 12px !important; }
+.row,
+.input-row,
+.time-row,
+.period-row,
+.action-section { gap: 8px !important; }
+.action-section { margin-top: 20px !important; }
+
+.gemini-input {
+  padding: 7px 10px !important;
+  font-size: 12px !important;
+  border-radius: 7px !important;
+}
+.btn,
+.action-btn {
+  padding: 7px 13px !important;
+  font-size: 12px !important;
+}
+.start-btn {
+  max-width: 220px !important;
+  height: 40px !important;
+  font-size: 14px !important;
+}
+
+.modal { padding: 20px !important; border-radius: 12px !important; }
+.tray-verify-modal,
+.verify-modal { width: 280px !important; }
+.tray-verify-header,
+.verify-header { padding: 12px 16px !important; }
+.tray-qr-container,
+.qr-container { padding: 20px !important; }
+.tray-qr-box,
+.qr-box { padding: 8px !important; border-radius: 10px !important; }
+.tray-verify-tip,
+.verify-tip { margin: 14px 0 !important; font-size: 12px !important; }
+.tray-verify-done,
+.full-width { height: 36px !important; }
 </style>
