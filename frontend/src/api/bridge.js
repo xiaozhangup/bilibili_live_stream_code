@@ -182,6 +182,12 @@ export const useBridge = () => {
     async stopDanmuMonitor() {
       return await callPy('stop_danmu_monitor');
     },
+    async getDanmuConfig() {
+      return await callPy('get_danmu_config');
+    },
+    async setDanmuConfig(tryFetch) {
+      return await callPy('set_danmu_config', tryFetch);
+    },
 
     // 发送弹幕
     async sendDanmu(msg) {
@@ -197,6 +203,22 @@ export const useBridge = () => {
     async setAppConfig(key, value) {
       const res = await callPy('set_app_config', key, value);
       return res.code === 0;
+    },
+
+    // 开播状态接口配置
+    async getStatusApiConfig() {
+      return await callPy('get_status_api_config');
+    },
+    async setStatusApiPort(port) {
+      return await callPy('set_status_api_port', port);
+    },
+
+    // 定时开播配置
+    async getScheduleConfig() {
+      return await callPy('get_schedule_config');
+    },
+    async setScheduleConfig(enabled, periods) {
+      return await callPy('set_schedule_config', enabled, periods);
     },
 
     // 版本号

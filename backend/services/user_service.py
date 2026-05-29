@@ -46,7 +46,9 @@ class UserService:
             "bcoin": wallet.get("bcoin_balance", 0), "following": stat.get("following", 0),
             "follower": stat.get("follower", 0), "dynamic_count": stat.get("dynamic_count", 0),
             "last_title": old_data.get("last_title", ""), "last_area_id": old_data.get("last_area_id", ""),
-            "last_area_name": old_data.get("last_area_name", [])
+            "last_area_name": old_data.get("last_area_name", []),
+            # 定时开播配置（按账号保存）
+            "auto_live_schedule": old_data.get("auto_live_schedule", {"enabled": False, "periods": []}),
         }
         config_data["users"][uid] = new_data
         config_data["current_uid"] = uid

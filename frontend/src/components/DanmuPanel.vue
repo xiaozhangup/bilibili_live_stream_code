@@ -1,11 +1,13 @@
 <script setup>
-import { ref, onActivated, nextTick } from 'vue';
+import { ref, onActivated, onMounted, nextTick, watch } from 'vue';
 import { useBridge } from '@/api/bridge';
 
-const { startDanmuMonitor, sendDanmu } = useBridge();
+const { startDanmuMonitor, stopDanmuMonitor, sendDanmu, getDanmuConfig, setDanmuConfig } = useBridge();
 const messages = ref([]);
 const messageListRef = ref(null);
 const isAutoScroll = ref(true);
+const tryFetchDanmu = ref(false);
+const danmuConfigReady = ref(false);
 const inputMsg = ref('');
 const sending = ref(false);
 
@@ -70,6 +72,30 @@ const handleSend = async () => {
   }
 };
 
+const loadDanmuConfig = async () => {
+  try {
+    const res = await getDanmuConfig();
+    if (res.code === 0 && res.data) {
+      tryFetchDanmu.value = !!res.data.try_fetch;
+    }
+    if (tryFetchDanmu.value) {
+      await tryStartMonitor();
+    }
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+const tryStartMonitor = async () => {
+  const res = await startDanmuMonitor();
+  if (res?.code !== 0) {
+    addMessage({
+      type: 'system',
+      msg: res?.msg || '弹幕连接失败'
+    });
+  }
+};
+
 // 使用 onActivated/onDeactivated 替代 onMounted/onUnmounted
 // 因为父组件使用了 KeepAlive，onMounted 只会在第一次进入时触发
 // onActivated 会在每次切换到弹幕 Tab 时触发，确保弹幕能重新连接
@@ -77,10 +103,32 @@ onActivated(() => {
   window.onDanmuMessage = (data) => {
     addMessage(data);
   };
-  startDanmuMonitor();
+  if (tryFetchDanmu.value) {
+    tryStartMonitor();
+  }
 });
 
 // 切出弹幕 Tab 时不停止弹幕连接，让弹幕在后台持续运行
+
+onMounted(async () => {
+  await loadDanmuConfig();
+  danmuConfigReady.value = true;
+});
+
+watch(tryFetchDanmu, async (val) => {
+  if (!danmuConfigReady.value) return;
+  try {
+    await setDanmuConfig(!!val);
+    if (val) {
+      await tryStartMonitor();
+    } else {
+      await stopDanmuMonitor();
+      addMessage({ type: 'system', msg: '已关闭弹幕获取' });
+    }
+  } catch (e) {
+    console.error(e);
+  }
+});
 </script>
 
 <template>
@@ -88,6 +136,9 @@ onActivated(() => {
     <div class="danmu-header">
       <h3>弹幕监控</h3>
       <div class="controls">
+        <label style="margin-right: 12px;">
+          <input type="checkbox" v-model="tryFetchDanmu"> 尝试获取弹幕
+        </label>
         <label>
           <input type="checkbox" v-model="isAutoScroll"> 自动滚动
         </label>

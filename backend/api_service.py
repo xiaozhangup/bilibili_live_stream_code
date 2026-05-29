@@ -9,6 +9,8 @@ from backend.services.user_service import UserService
 from backend.services.live_service import LiveService
 from backend.services.auth_service import AuthService
 from backend.services.danmu_service import DanmuService
+from backend.services.schedule_service import ScheduleService
+from backend.services.status_api_service import StatusApiService
 
 logger = logging.getLogger("ApiService")
 
@@ -39,6 +41,9 @@ class ApiService:
         self.live_service = LiveService(self.api_client, self.config_manager, self.session_state)
         self.auth_service = AuthService(self.api_client, self.user_service, self.live_service, self.session_state)
         self.danmu_service = DanmuService(self.api_client, self.session_state)
+
+        # 防止并发 start/stop（前端/托盘/定时）
+        self._live_lock = threading.Lock()
         
         # 设置弹幕回调
         self.danmu_service.set_callback(self._on_danmu_message)
@@ -49,6 +54,22 @@ class ApiService:
 
         # Initial setup
         self.user_service.init_current_user()
+
+        # 定时开播服务
+        self.schedule_service = ScheduleService(
+            self.config_manager,
+            self.session_state,
+            self.live_service,
+            self._live_lock,
+            interval_sec=30,
+        )
+        self.schedule_service.start()
+
+        # 对外状态接口
+        self.status_api_service = StatusApiService(self.session_state, host="127.0.0.1")
+        port = int(self.config_manager.data.get("status_api_port", 0) or 0)
+        if port > 0:
+            self.status_api_service.start(port)
         
         # Asyncio loop for danmu
         self.loop = asyncio.new_event_loop()
@@ -87,6 +108,14 @@ class ApiService:
             self.live_service.stop_live()
 
         asyncio.run_coroutine_threadsafe(self.danmu_service.stop(), self.loop)
+        try:
+            self.schedule_service.stop()
+        except Exception:
+            pass
+        try:
+            self.status_api_service.stop()
+        except Exception:
+            pass
         return self.window_service.window_close(lambda: self.config_manager.save())
     def get_window_position(self): return self.window_service.get_window_position()
     def window_drag(self, target_x, target_y): return self.window_service.window_drag(target_x, target_y)
@@ -112,7 +141,8 @@ class ApiService:
     def update_title(self, title): return self.live_service.update_title(title)
     def update_area(self, p_name, s_name): return self.live_service.update_area(p_name, s_name)
     def start_live(self, p_name=None, s_name=None): 
-        res = self.live_service.start_live(p_name, s_name)
+        with self._live_lock:
+            res = self.live_service.start_live(p_name, s_name)
         # if res['code'] == 0:
         #      # 开启直播成功后，连接弹幕
         #      room_id = self.session_state.room_id
@@ -121,12 +151,15 @@ class ApiService:
         return res
         
     def stop_live(self): 
-        res = self.live_service.stop_live()
+        with self._live_lock:
+            res = self.live_service.stop_live()
         return res
 
     # --- Danmu Methods ---
     def start_danmu_monitor(self):
         """开启弹幕监听，如果已在运行则跳过"""
+        if not bool(self.config_manager.data.get("danmu_try_fetch", False)):
+            return {"code": -1, "msg": "弹幕获取已关闭（请在弹幕页开启开关）"}
         if self.danmu_service.running:
             return {"code": 0, "msg": "弹幕已在运行"}
         room_id = self.session_state.room_id
@@ -142,6 +175,16 @@ class ApiService:
     def send_danmu(self, msg):
         """发送弹幕"""
         return self.danmu_service.send_danmu(msg)
+
+    def get_danmu_config(self):
+        return {"code": 0, "data": {"try_fetch": bool(self.config_manager.data.get("danmu_try_fetch", False))}}
+
+    def set_danmu_config(self, try_fetch):
+        self.config_manager.data["danmu_try_fetch"] = bool(try_fetch)
+        self.config_manager.save()
+        if not bool(try_fetch):
+            asyncio.run_coroutine_threadsafe(self.danmu_service.stop(), self.loop)
+        return {"code": 0}
 
     # --- App Config Methods ---
     def get_app_config(self):
@@ -161,6 +204,93 @@ class ApiService:
             self.config_manager.save()
             return {"code": 0}
         return {"code": -1, "msg": "Unknown config key"}
+
+    # --- Status API Methods ---
+    def get_status_api_config(self):
+        port = int(self.config_manager.data.get("status_api_port", 0) or 0)
+        return {
+            "code": 0,
+            "data": {
+                "enabled": port > 0,
+                "port": port,
+                "url": f"http://127.0.0.1:{port}/status" if port > 0 else "",
+            },
+        }
+
+    def set_status_api_port(self, port):
+        try:
+            port = int(port)
+        except Exception:
+            return {"code": -1, "msg": "端口必须是数字"}
+        if port < 0 or port > 65535:
+            return {"code": -1, "msg": "端口范围必须是 0-65535"}
+
+        ok, msg = self.status_api_service.start(port)
+        if not ok:
+            return {"code": -1, "msg": msg}
+
+        self.config_manager.data["status_api_port"] = port
+        self.config_manager.save()
+        return {"code": 0, "data": {"port": port}}
+
+    # --- Schedule Config Methods ---
+    def get_schedule_config(self):
+        """获取当前账号的定时开播配置"""
+        uid = self.config_manager.data.get("current_uid")
+        users = self.config_manager.data.get("users", {})
+        if not uid or uid not in users:
+            return {"code": -1, "msg": "未登录"}
+        schedule = users[uid].get("auto_live_schedule") or {"enabled": False, "periods": []}
+        # 兜底补齐字段，避免旧数据缺失
+        schedule.setdefault("enabled", False)
+        schedule.setdefault("periods", [])
+        return {"code": 0, "data": schedule}
+
+    def set_schedule_config(self, enabled, periods):
+        """保存当前账号的定时开播配置"""
+        uid = self.config_manager.data.get("current_uid")
+        users = self.config_manager.data.get("users", {})
+        if not uid or uid not in users:
+            return {"code": -1, "msg": "未登录"}
+
+        def parse_hhmm(value):
+            if not isinstance(value, str):
+                raise ValueError("时间格式错误")
+            value = value.strip()
+            parts = value.split(":")
+            if len(parts) != 2:
+                raise ValueError("时间格式错误")
+            hour = int(parts[0])
+            minute = int(parts[1])
+            if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+                raise ValueError("时间范围错误")
+            return f"{hour:02d}:{minute:02d}"
+
+        if periods is None:
+            periods = []
+        if not isinstance(periods, list):
+            return {"code": -1, "msg": "periods 必须是数组"}
+        if len(periods) > 20:
+            return {"code": -1, "msg": "最多支持 20 个时段"}
+
+        normalized = []
+        try:
+            for p in periods:
+                if not isinstance(p, dict):
+                    raise ValueError("时段格式错误")
+                start = parse_hhmm(p.get("start", ""))
+                end = parse_hhmm(p.get("end", ""))
+                normalized.append({"start": start, "end": end})
+        except Exception as e:
+            return {"code": -1, "msg": str(e)}
+
+        users[uid]["auto_live_schedule"] = {"enabled": bool(enabled), "periods": normalized}
+        self.config_manager.save()
+        try:
+            self.schedule_service.wakeup()
+        except Exception:
+            pass
+        return {"code": 0}
 
     def get_version(self):
         """获取应用版本号"""
