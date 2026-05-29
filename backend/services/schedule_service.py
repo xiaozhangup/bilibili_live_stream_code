@@ -7,11 +7,12 @@ logger = logging.getLogger("ScheduleService")
 
 
 class ScheduleService:
-    def __init__(self, config_manager, session_state, live_service, live_lock, interval_sec=30):
+    def __init__(self, config_manager, session_state, live_service, live_lock, window_service=None, interval_sec=30):
         self.config = config_manager
         self.state = session_state
         self.live_service = live_service
         self.live_lock = live_lock
+        self.window_service = window_service
         self.interval_sec = max(5, int(interval_sec))
 
         self._stop_event = threading.Event()
@@ -23,6 +24,14 @@ class ScheduleService:
 
         # 如果在自动开播时段内手动停播，则当前时段内不再自动开播
         self._manual_stop_suppress = False
+
+    def _notify_frontend(self, function_name, data):
+        if not self.window_service:
+            return
+        try:
+            self.window_service.send_to_frontend(function_name, data)
+        except Exception:
+            pass
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -172,9 +181,15 @@ class ScheduleService:
 
             if res and res.get("code") == 0:
                 logger.info("Auto schedule started live")
+                self._notify_frontend("onAutoLiveStarted", res.get("data") if isinstance(res, dict) else None)
             else:
                 code = res.get("code") if isinstance(res, dict) else None
                 logger.warning(f"Auto schedule start failed: {res}")
+                if code in (60024, 60043):
+                    self._notify_frontend("onAutoNeedFaceVerify", res.get("qr") if isinstance(res, dict) else "")
+                else:
+                    msg = res.get("msg") if isinstance(res, dict) else None
+                    self._notify_frontend("onAutoLiveError", msg or "定时开播失败")
                 if code in (60024, 60043):
                     # 人脸认证：暂停一段时间避免刷屏
                     self._start_block_until = time.time() + 10 * 60
@@ -191,5 +206,6 @@ class ScheduleService:
                 res = self.live_service.stop_live()
             if res and res.get("code") == 0:
                 logger.info("Auto schedule stopped live")
+                self._notify_frontend("onAutoLiveStopped", None)
             else:
                 logger.warning(f"Auto schedule stop failed: {res}")

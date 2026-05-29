@@ -61,6 +61,7 @@ class ApiService:
             self.session_state,
             self.live_service,
             self._live_lock,
+            window_service=self.window_service,
             interval_sec=30,
         )
         self.schedule_service.start()
@@ -159,6 +160,16 @@ class ApiService:
             except Exception:
                 pass
         return res
+
+    def get_live_state(self):
+        """获取当前直播状态（用于前端同步/恢复显示）"""
+        return {
+            "code": 0,
+            "data": {
+                "is_live": bool(self.session_state.is_live),
+                "stream": self.session_state.last_stream_data or {},
+            },
+        }
 
     # --- Danmu Methods ---
     def start_danmu_monitor(self):
