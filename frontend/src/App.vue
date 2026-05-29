@@ -13,7 +13,7 @@ import MessageModal from '@/components/MessageModal.vue';
 import UserAccountModal from '@/components/UserAccountModal.vue';
 import WindowControls from '@/components/WindowControls.vue';
 
-const { loadSavedConfig, getWindowPosition, windowDrag, refreshCurrentUser } = useBridge();
+const { loadSavedConfig, getWindowPosition, windowDrag, refreshCurrentUser, getLiveState } = useBridge();
 const activeTab = ref('account');
 const isInitializing = ref(true);
 
@@ -104,6 +104,22 @@ onMounted(async () => {
     }
   } catch (e) { console.error(e); } finally { isInitializing.value = false; }
 
+  // 前端初始化后，拉取一次后端直播状态，避免“定时开播已开播但前端未更新”的情况
+  try {
+    const res = await getLiveState();
+    if (res && res.code === 0 && res.data) {
+      liveState.isLive = !!res.data.is_live;
+      if (liveState.isLive) {
+        const stream = res.data.stream || {};
+        liveState.rtmp1 = stream.rtmp1 || {};
+        liveState.rtmp2 = stream.rtmp2 || {};
+        liveState.srt = stream.srt || {};
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
   // --- 注册托盘事件处理函数 ---
   window.onTrayLiveStarted = (data) => {
     liveState.isLive = true;
@@ -114,6 +130,35 @@ onMounted(async () => {
     }
     activeTab.value = 'rtmp';
     showModal('成功', '托盘开播成功！推流码已生成', 'success');
+  };
+
+  // --- 定时开播事件 ---
+  window.onAutoLiveStarted = (data) => {
+    liveState.isLive = true;
+    if (data) {
+      liveState.rtmp1 = data.rtmp1 || {};
+      liveState.rtmp2 = data.rtmp2 || {};
+      liveState.srt = data.srt || {};
+    }
+    showModal('提示', '定时开播：已开播', 'success');
+  };
+
+  window.onAutoNeedFaceVerify = async (qrUrl) => {
+    try {
+      trayFaceVerifyQr.value = await QRCode.toDataURL(qrUrl, { width: 200, margin: 2 });
+    } catch (e) {
+      trayFaceVerifyQr.value = '';
+    }
+    showTrayFaceVerify.value = true;
+  };
+
+  window.onAutoLiveStopped = () => {
+    liveState.isLive = false;
+    showModal('提示', '定时开播：已停播', 'info');
+  };
+
+  window.onAutoLiveError = (msg) => {
+    showModal('定时开播失败', msg || '未知错误', 'error');
   };
 
   window.onTrayNeedFaceVerify = async (qrUrl) => {
@@ -137,6 +182,10 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.onTrayLiveStarted = null;
+  window.onAutoLiveStarted = null;
+  window.onAutoNeedFaceVerify = null;
+  window.onAutoLiveStopped = null;
+  window.onAutoLiveError = null;
   window.onTrayNeedFaceVerify = null;
   window.onTrayLiveStopped = null;
   window.onTrayLiveError = null;

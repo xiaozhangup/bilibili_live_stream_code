@@ -168,15 +168,15 @@ class LiveService:
                 # Mask RTMP address for logging
                 logger.info(f"RTMP-1 Addr: {util.mask_string(rtmp_addr, 10, 5)}")
                 logger.info(f"RTMP-1 Code: {util.mask_string(rtmp_code, 5, 5)}")
-                
-                return {
-                    "code": 0, 
-                    "data": {
-                        "rtmp1": {"addr": rtmp_addr, "code": rtmp_code},
-                        "rtmp2": {"addr": rtmp2_addr, "code": rtmp2_code},
-                        "srt": {"addr": srt_addr, "code": srt_code}
-                    }
+
+                stream_data = {
+                    "rtmp1": {"addr": rtmp_addr, "code": rtmp_code},
+                    "rtmp2": {"addr": rtmp2_addr, "code": rtmp2_code},
+                    "srt": {"addr": srt_addr, "code": srt_code},
                 }
+                self.state.last_stream_data = stream_data
+
+                return {"code": 0, "data": stream_data}
             elif res['code'] == 60024:
                 logger.info("Live stream requires face verification (60024).")
                 return {"code": 60024, "qr": res['data']['qr']}
@@ -196,6 +196,7 @@ class LiveService:
         if success and res['code'] == 0:
             logger.info("Live stream stopped successfully.")
             self.state.is_live = False # 标记为停止直播
+            self.state.last_stream_data = None
             return {"code": 0}
         logger.error(f"Stop live failed: {res}")
         return {"code": -1}

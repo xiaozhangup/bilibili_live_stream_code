@@ -6,6 +6,7 @@ class SessionState:
         self.current_area_id = None
         self.current_area_names = []
         self.is_live = False # 新增直播状态标记
+        self.last_stream_data = None
 
     def clear(self):
         self.room_id = ""
@@ -14,3 +15,4 @@ class SessionState:
         self.current_area_id = None
         self.current_area_names = []
         self.is_live = False
+        self.last_stream_data = None

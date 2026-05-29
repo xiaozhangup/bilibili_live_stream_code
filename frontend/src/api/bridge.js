@@ -149,6 +149,11 @@ export const useBridge = () => {
       }
     },
 
+    // 获取当前直播状态（用于前端初始化/同步）
+    async getLiveState() {
+      return await callPy('get_live_state');
+    },
+
     // 账户管理接口
     async getAccountList() {
       const res = await callPy('get_account_list');
