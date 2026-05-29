@@ -5,12 +5,14 @@ import sys
 if sys.platform == 'linux':
     os.environ["GDK_BACKEND"] = "x11"
     os.environ["QT_QPA_PLATFORM"] = "xcb"
+    os.environ["QT_OPENGL"] = "software"
+    os.environ["QT_QUICK_BACKEND"] = "software"
     os.environ["QT_STYLE_OVERRIDE"] = "Fusion"
-    os.environ["XDG_SESSION_TYPE"] = "cxb"
+    os.environ["XDG_SESSION_TYPE"] = "x11"
     if "QT_QPA_PLATFORMTHEME" in os.environ:
         os.environ["QT_QPA_PLATFORMTHEME"] = ""
-    os.environ["QT_XCB_GL_INTEGRATION"] = "none"
-    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --no-sandbox --enable-features=UseOzonePlatform --ozone-platform=x11"
+    os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --disable-software-rasterizer --disable-dev-shm-usage"
 elif sys.platform == 'win32':
     os.environ["QT_OPENGL"] = "software"
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --disable-software-rasterizer"
@@ -505,4 +507,3 @@ if __name__ == '__main__':
     # Windows 保持默认 (Edge/CEF)
     gui_backend = 'qt' if sys.platform != 'win32' else None
     webview.start(on_app_start, window, gui=gui_backend)
-
