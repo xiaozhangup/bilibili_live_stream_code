@@ -21,6 +21,9 @@ class ScheduleService:
         # 避免人脸认证/失败时频繁重试
         self._start_block_until = 0.0
 
+        # 如果在自动开播时段内手动停播，则当前时段内不再自动开播
+        self._manual_stop_suppress = False
+
     def start(self):
         if self._thread and self._thread.is_alive():
             return
@@ -39,6 +42,39 @@ class ScheduleService:
 
     def wakeup(self):
         self._wakeup_event.set()
+
+    def mark_manual_stop(self):
+        """
+        在“自动开播时段内”手动停播后，抑制当前时段的自动开播。
+        该抑制会在离开所有开播时段（should_live=False）后自动解除。
+        """
+        try:
+            user, schedule = self._get_current_schedule()
+            if not user or not schedule or not schedule.get("enabled"):
+                return
+            periods = schedule.get("periods") or []
+            if not periods:
+                return
+
+            now = datetime.now()
+            now_min = now.hour * 60 + now.minute
+
+            should_live = False
+            for p in periods:
+                if not isinstance(p, dict):
+                    continue
+                start_min = self._parse_hhmm_to_minutes(p.get("start"))
+                end_min = self._parse_hhmm_to_minutes(p.get("end"))
+                if self._is_now_in_period(now_min, start_min, end_min):
+                    should_live = True
+                    break
+
+            if should_live:
+                self._manual_stop_suppress = True
+                logger.info("Manual stop detected during schedule period; suppress auto start until period ends")
+                self.wakeup()
+        except Exception:
+            logger.exception("Failed to mark manual stop")
 
     def _parse_hhmm_to_minutes(self, value):
         if not isinstance(value, str):
@@ -115,8 +151,14 @@ class ScheduleService:
                 should_live = True
                 break
 
+        # 一旦离开所有开播时段，解除“手动停播抑制”
+        if not should_live and self._manual_stop_suppress:
+            self._manual_stop_suppress = False
+
         # 开播
         if should_live and not self.state.is_live:
+            if self._manual_stop_suppress:
+                return
             if time.time() < self._start_block_until:
                 return
             with self.live_lock:
@@ -151,4 +193,3 @@ class ScheduleService:
                 logger.info("Auto schedule stopped live")
             else:
                 logger.warning(f"Auto schedule stop failed: {res}")
-

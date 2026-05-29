@@ -153,6 +153,11 @@ class ApiService:
     def stop_live(self): 
         with self._live_lock:
             res = self.live_service.stop_live()
+        if res and res.get("code") == 0:
+            try:
+                self.schedule_service.mark_manual_stop()
+            except Exception:
+                pass
         return res
 
     # --- Danmu Methods ---
